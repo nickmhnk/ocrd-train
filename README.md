@@ -1,3 +1,10 @@
+# Modifications
+* add target error rate parameter
+* add learning rate parameter;
+
+
+
+# Original README
 # ocrd-train
 
 > Training workflow for Tesseract 4 as a Makefile for dependency tracking and building the required software from source.
