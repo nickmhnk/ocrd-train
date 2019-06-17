@@ -5,6 +5,18 @@ LOCAL := $(PWD)/usr
 PATH := $(LOCAL)/bin:$(PATH)
 TESSDATA =  $(LOCAL)/share/tessdata
 
+# target error rante default is 0.01
+TARGETERRORRATE = 0.01
+
+# learning rate
+LR = 0.001
+
+# name of the set on which to perform evaluation, can be eval or train
+SETTYPE = eval
+
+#maximum number of iterations
+MAXITER = 100
+
 # Name of the model to be built. Default: $(MODEL_NAME)
 MODEL_NAME = foo
 
@@ -35,7 +47,7 @@ GROUND_TRUTH_DIR := data/ground-truth
 NORM_MODE = 2
 
 # Page segmentation mode. Default: $(PSM)
-PSM = 6
+PSM = 7
 
 # Ratio of train / eval training data. Default: $(RATIO_TRAIN)
 RATIO_TRAIN := 0.90
@@ -78,7 +90,11 @@ ALL_LSTMF = data/all-lstmf
 unicharset: data/unicharset
 
 # Create lists of lstmf filenames for training and eval
-lists: $(ALL_LSTMF) data/list.train data/list.eval
+#lists: $(ALL_LSTMF) data/list.train data/list.eval
+lists: $(ALL_LSTMF) mylist
+
+mylist:
+	python3 split_train_val.py $(ALL_LSTMF) $(RATIO_TRAIN)
 
 data/list.train: $(ALL_LSTMF)
 	total=`cat $(ALL_LSTMF) | wc -l` \
@@ -108,7 +124,7 @@ $(ALL_BOXES): $(sort $(patsubst %.tif,%.box,$(wildcard $(GROUND_TRUTH_DIR)/*.tif
 	find $(GROUND_TRUTH_DIR) -name '*.box' -exec cat {} \; > "$@"
 
 $(GROUND_TRUTH_DIR)/%.box: $(GROUND_TRUTH_DIR)/%.tif $(GROUND_TRUTH_DIR)/%.gt.txt
-	python generate_line_box.py -i "$(GROUND_TRUTH_DIR)/$*.tif" -t "$(GROUND_TRUTH_DIR)/$*.gt.txt" > "$@"
+	python3 generate_line_box.py -i "$(GROUND_TRUTH_DIR)/$*.tif" -t "$(GROUND_TRUTH_DIR)/$*.gt.txt" > "$@"
 
 $(ALL_LSTMF): $(sort $(patsubst %.tif,%.lstmf,$(wildcard $(GROUND_TRUTH_DIR)/*.tif)))
 	find $(GROUND_TRUTH_DIR) -name '*.lstmf' -exec echo {} \; | sort -R -o "$@"
@@ -126,30 +142,34 @@ $(PROTO_MODEL): data/unicharset data/radical-stroke.txt
 	  --output_dir data/ \
 	  --lang $(MODEL_NAME)
 
+
+#--net_spec "[1,36,0,1Ct3,3,16Mp3,3Lfys64Lfx96Lrx96Lfx512O1c`head -n1 data/unicharset`]" \
+
 ifdef START_MODEL
 $(LAST_CHECKPOINT): unicharset lists $(PROTO_MODEL)
 	mkdir -p data/checkpoints
 	lstmtraining \
-	  --traineddata $(PROTO_MODEL) \
-          --old_traineddata $(TESSDATA)/$(START_MODEL).traineddata \
 	  --continue_from data/$(START_MODEL)/$(START_MODEL).lstm \
-	  --net_spec "[1,36,0,1 Ct3,3,16 Mp3,3 Lfys48 Lfx96 Lrx96 Lfx256 O1c`head -n1 data/unicharset`]" \
+	  --traineddata $(PROTO_MODEL) \
+	  --old_traineddata $(TESSDATA)/$(START_MODEL).traineddata \
 	  --model_output data/checkpoints/$(MODEL_NAME) \
-	  --learning_rate 20e-4 \
+	  --learning_rate $(LR) \
 	  --train_listfile data/list.train \
 	  --eval_listfile data/list.eval \
-	  --max_iterations 10000
+	  --max_iterations $(MAXITER) \
+	  --target_error_rate $(TARGETERRORRATE)
 else
 $(LAST_CHECKPOINT): unicharset lists $(PROTO_MODEL)
 	mkdir -p data/checkpoints
 	lstmtraining \
 	  --traineddata $(PROTO_MODEL) \
-	  --net_spec "[1,36,0,1 Ct3,3,16 Mp3,3 Lfys48 Lfx96 Lrx96 Lfx256 O1c`head -n1 data/unicharset`]" \
+	  --net_spec "[1,36,0,1Ct3,3,16Mp3,3Lfys64Lfx96Lrx96Lfx512O1c`head -n1 data/unicharset`]" \
 	  --model_output data/checkpoints/$(MODEL_NAME) \
-	  --learning_rate 20e-4 \
+	  --learning_rate $(LR) \
 	  --train_listfile data/list.train \
 	  --eval_listfile data/list.eval \
-	  --max_iterations 10000
+	  --max_iterations $(MAXITER) \
+	  --target_error_rate $(TARGETERRORRATE)
 endif
 
 data/$(MODEL_NAME).traineddata: $(LAST_CHECKPOINT)
@@ -212,3 +232,10 @@ clean:
 	rm -rf data/$(MODEL_NAME)
 	rm -rf data/unicharset
 	rm -rf data/checkpoints
+
+
+eval:
+	lstmeval \
+		--model=data/$(MODEL_NAME).traineddata   \
+		--eval_listfile=data/list.$(SETTYPE) \
+		--verbosity=2
