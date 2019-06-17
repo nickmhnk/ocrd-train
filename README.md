@@ -3,6 +3,17 @@
 * add learning rate parameter;
 
 
+Example:
+
+train
+```
+make training MODEL_NAME=mymodel START_MODEL=eng_best MAXITER=3000 GROUND_TRUTH_DIR=data/mydataset LR=0.001 TARGETERRORRATE=0.001
+```
+
+eval
+```
+make eval MODEL_NAME=mymodel SETTYPE=eval
+```
 
 # Original README
 # ocrd-train
